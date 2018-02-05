@@ -6,8 +6,14 @@ use DomainShop\Controller\HomepageController;
 use DomainShop\Controller\PayController;
 use DomainShop\Controller\RegisterController;
 use DomainShop\Controller\SetPriceController;
+use DomainShop\Infrastructure\Clock\Clock as ClockInterface;
+use DomainShop\Infrastructure\Clock\Clock;
+use DomainShop\Infrastructure\Core\StockMarket;
+use DomainShop\Infrastructure\StockMarket\Fixed1156EchangeRate;
+use DomainShop\Infrastructure\StockMarket\SwapStockMarket;
 use DomainShop\Resources\Views\TwigTemplates;
 use Interop\Container\ContainerInterface;
+use Swap\Builder;
 use Symfony\Component\Debug\Debug;
 use Xtreamwayz\Pimple\Container;
 use Zend\Diactoros\Response;
@@ -134,7 +140,9 @@ $container[CheckAvailabilityController::class] = function (ContainerInterface $c
 $container[RegisterController::class] = function (ContainerInterface $container) {
     return new RegisterController(
         $container->get(RouterInterface::class),
-        $container->get(TemplateRendererInterface::class)
+        $container->get(TemplateRendererInterface::class),
+        $container->get(StockMarket::class),
+        $container->get(ClockInterface::class)
     );
 };
 $container[PayController::class] = function (ContainerInterface $container) {
@@ -150,6 +158,22 @@ $container[FinishController::class] = function (ContainerInterface $container) {
 };
 $container[SetPriceController::class] = function () {
     return new SetPriceController();
+};
+
+$container[ClockInterface::class] = function () {
+    if ('testing' === getenv('APPLICATION_ENV')) {
+        return new Clock(new Datetime(getenv('SERVER_TIME')));
+    }
+
+    return new Clock(new Datetime('now'));
+};
+
+$container[StockMarket::class] = function () {
+    if ('testing' === getenv('APPLICATION_ENV')) {
+        return new Fixed1156EchangeRate();
+    }
+
+    return new SwapStockMarket(new Builder());
 };
 
 return $container;

@@ -6,9 +6,10 @@ namespace DomainShop\Controller;
 use Common\Persistence\Database;
 use DomainShop\Entity\Order;
 use DomainShop\Entity\Pricing;
+use DomainShop\Infrastructure\Core\Clock;
+use DomainShop\Infrastructure\Core\StockMarket;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
-use Swap\Builder;
 use Zend\Diactoros\Response\RedirectResponse;
 use Zend\Expressive\Router\RouterInterface;
 use Zend\Expressive\Template\TemplateRendererInterface;
@@ -25,11 +26,25 @@ final class RegisterController implements MiddlewareInterface
      * @var TemplateRendererInterface
      */
     private $renderer;
+    /**
+     * @var StockMarket
+     */
+    private $stockMarket;
+    /**
+     * @var Clock
+     */
+    private $clock;
 
-    public function __construct(RouterInterface $router, TemplateRendererInterface $renderer)
-    {
+    public function __construct(
+        RouterInterface $router,
+        TemplateRendererInterface $renderer,
+        StockMarket $stockMarket,
+        Clock $clock
+    ) {
         $this->router = $router;
         $this->renderer = $renderer;
+        $this->stockMarket = $stockMarket;
+        $this->clock = $clock;
     }
 
     public function __invoke(Request $request, Response $response, callable $out = null)
@@ -66,12 +81,12 @@ final class RegisterController implements MiddlewareInterface
                 $pricing = Database::retrieve(Pricing::class, $order->getDomainNameExtension());
 
                 if ($order->getPayInCurrency() !== $pricing->getCurrency()) {
-                    $swap = (new Builder())
-                        ->add('fixer')
-                        ->build();
-                    $rate = $swap->latest($pricing->getCurrency() . '/' . $order->getPayInCurrency());
-
-                    $amount = (int)round($pricing->getAmount() * $rate->getValue());
+                    $rate = $this->stockMarket->exchangeRate(
+                        $pricing->getCurrency(),
+                        $order->getPayInCurrency(),
+                        $this->clock->getDatetime()
+                    );
+                    $amount = (int) round($pricing->getAmount() * $rate);
                 } else {
                     $amount = $pricing->getAmount();
                 }
