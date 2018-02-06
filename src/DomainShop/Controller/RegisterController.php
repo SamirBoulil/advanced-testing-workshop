@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace DomainShop\Controller;
 
 use Common\Persistence\Database;
+use DomainShop\Application\RegisterHandler;
 use DomainShop\Entity\Order;
 use DomainShop\Entity\Pricing;
 use DomainShop\Infrastructure\Core\Clock;
@@ -34,17 +35,19 @@ final class RegisterController implements MiddlewareInterface
      * @var Clock
      */
     private $clock;
+    /**
+     * @var RegisterHandler
+     */
+    private $registerHandler;
 
     public function __construct(
         RouterInterface $router,
         TemplateRendererInterface $renderer,
-        StockMarket $stockMarket,
-        Clock $clock
+        RegisterHandler $registerDomainHandlerHandler
     ) {
         $this->router = $router;
         $this->renderer = $renderer;
-        $this->stockMarket = $stockMarket;
-        $this->clock = $clock;
+        $this->registerHandler = $registerDomainHandlerHandler;
     }
 
     public function __invoke(Request $request, Response $response, callable $out = null)
@@ -68,32 +71,12 @@ final class RegisterController implements MiddlewareInterface
             }
 
             if (empty($formErrors)) {
-                $orderId = count(Database::retrieveAll(Order::class)) + 1;
-
-                $order = new Order();
-                $order->setId($orderId);
-                $order->setDomainName($submittedData['domain_name']);
-                $order->setOwnerName($submittedData['name']);
-                $order->setOwnerEmailAddress($submittedData['email_address']);
-                $order->setPayInCurrency($submittedData['currency']);
-
-                /** @var Pricing $pricing */
-                $pricing = Database::retrieve(Pricing::class, $order->getDomainNameExtension());
-
-                if ($order->getPayInCurrency() !== $pricing->getCurrency()) {
-                    $rate = $this->stockMarket->exchangeRate(
-                        $pricing->getCurrency(),
-                        $order->getPayInCurrency(),
-                        $this->clock->getDatetime()
-                    );
-                    $amount = (int) round($pricing->getAmount() * $rate);
-                } else {
-                    $amount = $pricing->getAmount();
-                }
-
-                $order->setAmount($amount);
-
-                Database::persist($order);
+                $order = $this->registerHandler->handle(
+                    $submittedData['domain_name'],
+                    $submittedData['name'],
+                    $submittedData['email_address'],
+                    $submittedData['currency']
+                );
 
                 return new RedirectResponse(
                     $this->router->generateUri(

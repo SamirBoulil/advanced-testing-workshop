@@ -10,18 +10,13 @@ class Clock implements \DomainShop\Infrastructure\Core\Clock
 {
     private $dateTime;
 
-    public function __construct(\DateTimeInterface $dateTime)
+    public function __construct(\DateTimeInterface $dateTime = null)
     {
         $this->dateTime = $dateTime;
     }
 
     public function getDatetime(): \DateTimeInterface
     {
-        $serverDatetime = getenv('SERVER_TIME');
-        if ($serverDatetime) {
-            return new Datetime(getenv('SERVER_TIME'));
-        }
-
-        return new Datetime('now');
+        return $this->dateTime ?? new DateTime('now');
     }
 }
